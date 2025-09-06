@@ -17,13 +17,7 @@ const connectDB = async () => {
 
 // Card Schema (for validation)
 const cardSchema = new mongoose.Schema({
-  isRFQ: Boolean,
-  minPrice: Number,
-  startingPrice: Number,
-  auctionEndTime: Date,
-  highestBid: {
-    amount: Number
-  },
+  askingPrice: Number,
   totalOffers: Number,
   status: String
 });
@@ -163,27 +157,11 @@ module.exports = async (req, res) => {
         return res.status(400).json({ message: 'Card is not available for offers' });
       }
 
-      // Validate offer amount based on card type
-      if (card.isRFQ) {
-        // For RFQ, amount must meet or exceed minimum price
-        if (amount < card.minPrice) {
-          return res.status(400).json({ 
-            message: `Offer must be at least $${card.minPrice} for this RFQ listing` 
-          });
-        }
-      } else {
-        // For auctions, amount must be higher than current highest bid or starting price
-        const minBid = Math.max(card.startingPrice, card.highestBid?.amount || 0);
-        if (amount <= minBid) {
-          return res.status(400).json({ 
-            message: `Bid must be higher than $${minBid}` 
-          });
-        }
-
-        // Check if auction is still active
-        if (new Date() > card.auctionEndTime) {
-          return res.status(400).json({ message: 'Auction has ended' });
-        }
+      // Validate offer amount (must be positive)
+      if (amount <= 0) {
+        return res.status(400).json({ 
+          message: 'Offer amount must be greater than $0' 
+        });
       }
 
       // Create new offer
@@ -197,20 +175,9 @@ module.exports = async (req, res) => {
 
       await offer.save();
 
-      // Update card with new highest bid if it's an auction
-      if (!card.isRFQ) {
-        card.highestBid = {
-          amount: parseFloat(amount),
-          bidderId: bidderId,
-          bidTime: new Date()
-        };
-        card.totalOffers += 1;
-        await card.save();
-      } else {
-        // For RFQ, just increment total offers
-        card.totalOffers += 1;
-        await card.save();
-      }
+      // Increment total offers count
+      card.totalOffers = (card.totalOffers || 0) + 1;
+      await card.save();
 
       res.status(201).json({
         message: 'Offer submitted successfully',

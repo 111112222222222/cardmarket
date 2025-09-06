@@ -32,6 +32,15 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 20,
+    match: /^[a-zA-Z0-9_]+$/
+  },
   firstName: {
     type: String,
     required: true,
@@ -117,6 +126,7 @@ module.exports = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         canTrade: user.canTrade,

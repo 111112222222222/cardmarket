@@ -1,4 +1,5 @@
-nd offconst upload = require('../middleware/upload');
+nd off
+namesconst upload = require('../middleware/upload');
 
 // Vercel API handler
 module.exports = async (req, res) => {

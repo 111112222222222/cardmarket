@@ -67,49 +67,11 @@ const cardSchema = new mongoose.Schema({
       message: 'Grading company is required for graded cards'
     }
   },
-  // Pricing and Sale Type
-  startingPrice: {
+  // Pricing
+  askingPrice: {
     type: Number,
     required: true,
     min: 0
-  },
-  minPrice: {
-    type: Number,
-    min: 0,
-    validate: {
-      validator: function(v) {
-        // Min price is required for RFQ, optional for auctions
-        return !this.isRFQ || (v && v >= 0);
-      },
-      message: 'Minimum price is required for RFQ listings'
-    }
-  },
-  isRFQ: {
-    type: Boolean,
-    default: false
-  },
-  // Auction Settings
-  auctionDuration: {
-    type: Number,
-    min: 0,
-    max: 48,
-    validate: {
-      validator: function(v) {
-        // Auction duration is required for auctions, not for RFQ
-        return this.isRFQ || (v >= 0 && v <= 48);
-      },
-      message: 'Auction duration must be between 0 and 48 hours for auction listings'
-    }
-  },
-  auctionEndTime: {
-    type: Date,
-    validate: {
-      validator: function(v) {
-        // Auction end time is only required for auctions, not for RFQ
-        return this.isRFQ || v;
-      },
-      message: 'Auction end time is required for auction listings'
-    }
   },
   description: {
     type: String,
@@ -129,21 +91,8 @@ const cardSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'sold', 'expired', 'draft', 'pending'],
+    enum: ['active', 'sold', 'draft', 'pending'],
     default: 'active'
-  },
-  highestBid: {
-    amount: {
-      type: Number,
-      default: 0
-    },
-    bidderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    bidTime: {
-      type: Date
-    }
   },
   totalOffers: {
     type: Number,
@@ -193,7 +142,7 @@ module.exports = async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .populate('sellerId', 'firstName lastName')
-        .select('cardName set year condition rarity startingPrice isGraded grade gradingCompany isRFQ minPrice auctionDuration auctionEndTime totalOffers highestBid createdAt sellerId frontImage backImage');
+        .select('cardName set year condition rarity askingPrice isGraded grade gradingCompany totalOffers createdAt sellerId frontImage backImage');
 
       const total = await Card.countDocuments({ status: 'active' });
       const totalPages = Math.ceil(total / parseInt(limit));
@@ -214,27 +163,22 @@ module.exports = async (req, res) => {
         year, 
         condition, 
         rarity, 
-        startingPrice, 
+        askingPrice, 
         description, 
         frontImage, 
         backImage, 
         sellerId,
-        // New grading fields
+        // Grading fields
         isGraded,
         grade,
-        gradingCompany,
-        // New RFQ and auction fields
-        isRFQ,
-        minPrice,
-        auctionDuration,
-        auctionEndTime
+        gradingCompany
       } = req.body;
 
       // Validate required fields
-      if (!cardName || !set || !year || !condition || !rarity || !startingPrice || !frontImage || !sellerId) {
+      if (!cardName || !set || !year || !condition || !rarity || !askingPrice || !frontImage || !sellerId) {
         return res.status(400).json({ 
           message: 'Missing required fields',
-          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'startingPrice', 'frontImage', 'sellerId']
+          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'askingPrice', 'frontImage', 'sellerId']
         });
       }
 
@@ -252,40 +196,6 @@ module.exports = async (req, res) => {
         }
       }
 
-      // Validate RFQ vs Auction fields
-      if (isRFQ) {
-        if (minPrice === undefined || minPrice === null || minPrice < 0) {
-          return res.status(400).json({ 
-            message: 'Minimum price is required for RFQ listings'
-          });
-        }
-        // For RFQ, auction fields are not required
-        if (auctionDuration !== undefined || auctionEndTime !== undefined) {
-          return res.status(400).json({ 
-            message: 'Auction fields should not be set for RFQ listings'
-          });
-        }
-      } else {
-        // For auctions, validate auction fields
-        if (auctionDuration === undefined || auctionDuration === null || auctionDuration < 0 || auctionDuration > 48) {
-          return res.status(400).json({ 
-            message: 'Auction duration must be between 0 and 48 hours'
-          });
-        }
-        if (!auctionEndTime) {
-          return res.status(400).json({ 
-            message: 'Auction end time is required for auction listings'
-          });
-        }
-        // Validate auction end time is in the future
-        const now = new Date();
-        const endTime = new Date(auctionEndTime);
-        if (endTime <= now) {
-          return res.status(400).json({ 
-            message: 'Auction end time must be in the future'
-          });
-        }
-      }
 
       // Create new card
       const card = new Card({
@@ -294,19 +204,15 @@ module.exports = async (req, res) => {
         year: parseInt(year),
         condition,
         rarity,
-        startingPrice: parseFloat(startingPrice),
+        askingPrice: parseFloat(askingPrice),
         description,
         frontImage,
         backImage,
         sellerId,
-        // New fields
+        // Grading fields
         isGraded: Boolean(isGraded),
         grade: isGraded ? parseInt(grade) : undefined,
         gradingCompany: isGraded ? gradingCompany : undefined,
-        isRFQ: Boolean(isRFQ),
-        minPrice: isRFQ ? parseFloat(minPrice) : undefined,
-        auctionDuration: !isRFQ ? parseInt(auctionDuration) : undefined,
-        auctionEndTime: !isRFQ ? new Date(auctionEndTime) : undefined,
         status: 'active'
       });
 
@@ -321,14 +227,10 @@ module.exports = async (req, res) => {
           year: card.year,
           condition: card.condition,
           rarity: card.rarity,
-          startingPrice: card.startingPrice,
+          askingPrice: card.askingPrice,
           isGraded: card.isGraded,
           grade: card.grade,
           gradingCompany: card.gradingCompany,
-          isRFQ: card.isRFQ,
-          minPrice: card.minPrice,
-          auctionDuration: card.auctionDuration,
-          auctionEndTime: card.auctionEndTime,
           status: card.status
         }
       });

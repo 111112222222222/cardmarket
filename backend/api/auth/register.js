@@ -32,6 +32,15 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 20,
+    match: /^[a-zA-Z0-9_]+$/
+  },
   firstName: {
     type: String,
     required: true,
@@ -99,18 +108,25 @@ module.exports = async (req, res) => {
     await connectDB();
 
 then e, 
-     const { email, password, firstName, lastName, phone } = req.body;
+     const { email, password, username, firstName, lastName, phone } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { username }] 
+    });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      if (existingUser.email === email) {
+        return res.status(400).json({ message: 'Email already exists' });
+      } else {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
     }
 
     // Create new user
     const user = new User({
       email,
       password,
+      username,
       firstName,
       lastName,
       phone,
@@ -172,6 +188,7 @@ then e,
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         canTrade: user.canTrade,
