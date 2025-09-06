@@ -122,7 +122,7 @@ const cardSchema = new mongoose.Schema({
   backImage: {
     type: String
   },
-  vendorId: {
+  sellerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -192,8 +192,8 @@ module.exports = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
-        .populate('vendorId', 'firstName lastName')
-        .select('cardName set year condition rarity startingPrice isGraded grade gradingCompany isRFQ minPrice auctionDuration auctionEndTime totalOffers highestBid createdAt vendorId');
+        .populate('sellerId', 'firstName lastName')
+        .select('cardName set year condition rarity startingPrice isGraded grade gradingCompany isRFQ minPrice auctionDuration auctionEndTime totalOffers highestBid createdAt sellerId');
 
       const total = await Card.countDocuments({ status: 'active' });
       const totalPages = Math.ceil(total / parseInt(limit));
@@ -218,7 +218,7 @@ module.exports = async (req, res) => {
         description, 
         frontImage, 
         backImage, 
-        vendorId,
+        sellerId,
         // New grading fields
         isGraded,
         grade,
@@ -231,10 +231,10 @@ module.exports = async (req, res) => {
       } = req.body;
 
       // Validate required fields
-      if (!cardName || !set || !year || !condition || !rarity || !startingPrice || !frontImage || !vendorId) {
+      if (!cardName || !set || !year || !condition || !rarity || !startingPrice || !frontImage || !sellerId) {
         return res.status(400).json({ 
           message: 'Missing required fields',
-          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'startingPrice', 'frontImage', 'vendorId']
+          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'startingPrice', 'frontImage', 'sellerId']
         });
       }
 
@@ -298,7 +298,7 @@ module.exports = async (req, res) => {
         description,
         frontImage,
         backImage,
-        vendorId,
+        sellerId,
         // New fields
         isGraded: Boolean(isGraded),
         grade: isGraded ? parseInt(grade) : undefined,

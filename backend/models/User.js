@@ -28,12 +28,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  userType: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    default: 'customer'
+  canTrade: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
+    type: Boolean,
+    default: false
+  },
+  isAdmin: {
     type: Boolean,
     default: false
   },

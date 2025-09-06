@@ -46,10 +46,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  userType: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    default: 'customer'
+  canTrade: {
+    type: Boolean,
+    default: false
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
     type: Boolean,
@@ -95,7 +98,8 @@ module.exports = async (req, res) => {
   try {
     await connectDB();
 
-    const { email, password, firstName, lastName, phone, userType } = req.body;
+then e, 
+    const { email, password, firstName, lastName, phone } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -110,7 +114,8 @@ module.exports = async (req, res) => {
       firstName,
       lastName,
       phone,
-      userType: userType || 'customer'
+      canTrade: false, // Default to false, admin can enable later
+      isAdmin: false
     });
 
     await user.save();
@@ -130,7 +135,8 @@ module.exports = async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        userType: user.userType
+        canTrade: user.canTrade,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {

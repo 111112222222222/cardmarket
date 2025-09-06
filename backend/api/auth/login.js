@@ -46,10 +46,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  userType: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    default: 'customer'
+  canTrade: {
+    type: Boolean,
+    default: false
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
     type: Boolean,
@@ -116,7 +119,8 @@ module.exports = async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        userType: user.userType
+        canTrade: user.canTrade,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {

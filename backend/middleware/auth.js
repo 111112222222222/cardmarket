@@ -23,18 +23,30 @@ const auth = async (req, res, next) => {
   }
 };
 
-const requireRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required.' });
-    }
-    
-    if (!roles.includes(req.user.userType)) {
-      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
-    }
-    
-    next();
-  };
+const requireTradingPermission = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+  
+  if (!req.user.canTrade) {
+    return res.status(403).json({ 
+      message: 'Trading permission required. Please contact an administrator to enable trading for your account.' 
+    });
+  }
+  
+  next();
 };
 
-module.exports = { auth, requireRole };
+const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required.' });
+  }
+  
+  if (!req.user.isAdmin) {
+    return res.status(403).json({ message: 'Admin access required.' });
+  }
+  
+  next();
+};
+
+module.exports = { auth, requireTradingPermission, requireAdmin };
