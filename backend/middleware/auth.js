@@ -28,6 +28,12 @@ const requireTradingPermission = (req, res, next) => {
     return res.status(401).json({ message: 'Authentication required.' });
   }
   
+  if (!req.user.isVerified) {
+    return res.status(403).json({ 
+      message: 'Email verification required for trading. Please verify your email address first.' 
+    });
+  }
+  
   if (!req.user.canTrade) {
     return res.status(403).json({ 
       message: 'Trading permission required. Please contact an administrator to enable trading for your account.' 

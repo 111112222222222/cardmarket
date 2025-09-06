@@ -193,7 +193,7 @@ module.exports = async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .populate('sellerId', 'firstName lastName')
-        .select('cardName set year condition rarity startingPrice isGraded grade gradingCompany isRFQ minPrice auctionDuration auctionEndTime totalOffers highestBid createdAt sellerId');
+        .select('cardName set year condition rarity startingPrice isGraded grade gradingCompany isRFQ minPrice auctionDuration auctionEndTime totalOffers highestBid createdAt sellerId frontImage backImage');
 
       const total = await Card.countDocuments({ status: 'active' });
       const totalPages = Math.ceil(total / parseInt(limit));
