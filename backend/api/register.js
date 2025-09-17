@@ -7,7 +7,10 @@ const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
   
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log('MongoDB connected');
   } catch (error) {
     console.error('MongoDB connection error:', error);
@@ -29,6 +32,15 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 20,
+    match: /^[a-zA-Z0-9_]+$/
+  },
   firstName: {
     type: String,
     required: true,
@@ -43,10 +55,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  userType: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    default: 'customer'
+  canTrade: {
+    type: Boolean,
+    default: false
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
     type: Boolean,
@@ -73,7 +88,6 @@ userSchema.pre('save', async function(next) {
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
-// Vercel API handler
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -93,22 +107,30 @@ module.exports = async (req, res) => {
   try {
     await connectDB();
 
-    const { email, password, firstName, lastName, phone, userType } = req.body;
+    const { email, password, username, firstName, lastName, phone } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { username }] 
+    });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      if (existingUser.email === email) {
+        return res.status(400).json({ message: 'Email already exists' });
+      } else {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
     }
 
     // Create new user
     const user = new User({
       email,
       password,
+      username,
       firstName,
       lastName,
       phone,
-      userType: userType || 'customer'
+      canTrade: false, // Default to false, admin can enable later
+      isAdmin: false
     });
 
     await user.save();
@@ -120,15 +142,57 @@ module.exports = async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    // Send verification email (optional - don't fail registration if email fails)
+    try {
+      const verificationToken = jwt.sign(
+        { userId: user._id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      const { Resend } = require('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+
+      await resend.emails.send({
+        from: 'Pokemon Marketplace <noreply@pokemonmarketplace.com>',
+        to: [email],
+        subject: 'Welcome! Verify Your Email - Pokemon Card Marketplace',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Welcome to Pokemon Card Marketplace!</h2>
+            <p>Hello ${firstName},</p>
+            <p>Thank you for registering! To enable trading on your account, please verify your email address by clicking the button below:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${verificationUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Verify Email Address</a>
+            </div>
+            <p>Or copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #666;">${verificationUrl}</p>
+            <p>This link will expire in 24 hours.</p>
+            <p>If you didn't create an account with us, please ignore this email.</p>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px;">Pokemon Card Marketplace</p>
+          </div>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't fail registration if email fails
+    }
+
     res.status(201).json({
-      message: 'User created successfully',
+      message: 'User created successfully. Please check your email to verify your account for trading.',
       token,
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        userType: user.userType
+        canTrade: user.canTrade,
+        isAdmin: user.isAdmin,
+        isVerified: user.isVerified
       }
     });
   } catch (error) {

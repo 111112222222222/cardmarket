@@ -7,7 +7,10 @@ const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
   
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log('MongoDB connected');
   } catch (error) {
     console.error('MongoDB connection error:', error);
@@ -29,6 +32,15 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 20,
+    match: /^[a-zA-Z0-9_]+$/
+  },
   firstName: {
     type: String,
     required: true,
@@ -43,10 +55,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  userType: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    default: 'customer'
+  canTrade: {
+    type: Boolean,
+    default: false
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   },
   isVerified: {
     type: Boolean,
@@ -111,9 +126,11 @@ module.exports = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        userType: user.userType
+        canTrade: user.canTrade,
+        isAdmin: user.isAdmin
       }
     });
   } catch (error) {

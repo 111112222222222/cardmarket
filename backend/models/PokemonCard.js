@@ -42,23 +42,15 @@ const pokemonCardSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  startingPrice: {
+  askingPrice: {
     type: Number,
     required: true,
     min: 0
   },
-  auctionEndTime: {
-    type: Date,
-    required: true
-  },
   status: {
     type: String,
-    enum: ['active', 'expired', 'sold', 'cancelled'],
+    enum: ['active', 'sold', 'cancelled'],
     default: 'active'
-  },
-  highestBid: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Offer'
   },
   totalOffers: {
     type: Number,
@@ -71,7 +63,7 @@ const pokemonCardSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-pokemonCardSchema.index({ status: 1, auctionEndTime: 1 });
+pokemonCardSchema.index({ status: 1, createdAt: 1 });
 pokemonCardSchema.index({ seller: 1, status: 1 });
 
 module.exports = mongoose.model('PokemonCard', pokemonCardSchema);
