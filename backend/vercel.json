@@ -7,6 +7,13 @@
       "destination": "/api/$1"
     }
   ],
+  "redirects": [
+    {
+      "source": "/api/api/(.*)",
+      "destination": "/api/$1",
+      "permanent": false
+    }
+  ],
   "env": {
     "MONGODB_URI": "mongodb+srv://sw997639:nDGXHYWM13Ub2rYF@submitcard.n55jege.mongodb.net/pokemon-marketplace?retryWrites=true&w=majority&appName=SubmitCard",
     "JWT_SECRET": "PokemonMarketplace2024SecretKey123!@#",
