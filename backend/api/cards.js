@@ -1,11 +1,16 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 // MongoDB connection
 const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
   
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
     console.log('MongoDB connected');
   } catch (error) {
     console.error('MongoDB connection error:', error);
@@ -31,47 +36,22 @@ const cardSchema = new mongoose.Schema({
   },
   condition: {
     type: String,
-    enum: ['mint', 'near-mint', 'excellent', 'good', 'fair', 'poor'],
+    enum: ['mint', 'near-mint', 'excellent', 'good', 'light-played', 'played', 'poor'],
     required: true
   },
   rarity: {
     type: String,
-    enum: ['common', 'uncommon', 'rare', 'ultra-rare', 'secret-rare', 'legendary'],
+    enum: ['common', 'uncommon', 'rare', 'holo-rare', 'ultra-rare', 'secret-rare'],
     required: true
   },
-  // Grading Information
-  isGraded: {
-    type: Boolean,
-    default: false
-  },
-  grade: {
-    type: Number,
-    min: 1,
-    max: 10,
-    validate: {
-      validator: function(v) {
-        // Grade is only required if card is graded
-        return !this.isGraded || (v >= 1 && v <= 10);
-      },
-      message: 'Grade must be between 1 and 10 for graded cards'
-    }
-  },
-  gradingCompany: {
-    type: String,
-    enum: ['PSA', 'TAG', 'CGC', 'Beckett'],
-    validate: {
-      validator: function(v) {
-        // Grading company is only required if card is graded
-        return !this.isGraded || v;
-      },
-      message: 'Grading company is required for graded cards'
-    }
-  },
-  // Pricing
-  askingPrice: {
+  startingPrice: {
     type: Number,
     required: true,
     min: 0
+  },
+  auctionEndTime: {
+    type: Date,
+    required: true
   },
   description: {
     type: String,
@@ -106,7 +86,22 @@ const cardSchema = new mongoose.Schema({
 
 const Card = mongoose.models.Card || mongoose.model('Card', cardSchema);
 
-// Vercel API handler
+// Extract user ID from JWT token
+const getUserIdFromToken = (req) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return decoded.userId;
+  } catch (error) {
+    return null;
+  }
+};
+
 module.exports = async (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -128,7 +123,7 @@ module.exports = async (req, res) => {
       
       // If ID is provided, fetch single card
       if (id) {
-        const card = await Card.findById(id);
+        const card = await Card.findById(id).populate('sellerId', 'firstName lastName username');
         if (!card) {
           return res.status(404).json({ message: 'Card not found' });
         }
@@ -141,13 +136,13 @@ module.exports = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
-        .populate('sellerId', 'firstName lastName')
-        .select('cardName set year condition rarity askingPrice isGraded grade gradingCompany totalOffers createdAt sellerId frontImage backImage');
+        .populate('sellerId', 'firstName lastName username')
+        .select('cardName set year condition rarity startingPrice auctionEndTime totalOffers createdAt sellerId frontImage backImage description');
 
       const total = await Card.countDocuments({ status: 'active' });
       const totalPages = Math.ceil(total / parseInt(limit));
 
-      res.json({
+      return res.json({
         cards,
         totalPages,
         currentPage: parseInt(page),
@@ -157,45 +152,32 @@ module.exports = async (req, res) => {
 
     // POST request - create new card
     else if (req.method === 'POST') {
+      // Check authentication
+      const sellerId = getUserIdFromToken(req);
+      if (!sellerId) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
       const { 
         cardName, 
         set, 
         year, 
         condition, 
         rarity, 
-        askingPrice, 
-        description, 
-        frontImage, 
-        backImage, 
-        sellerId,
-        // Grading fields
-        isGraded,
-        grade,
-        gradingCompany
+        startingPrice, 
+        auctionEndTime,
+        description,
+        frontImage,
+        backImage
       } = req.body;
 
       // Validate required fields
-      if (!cardName || !set || !year || !condition || !rarity || !askingPrice || !frontImage || !sellerId) {
+      if (!cardName || !set || !year || !condition || !rarity || !startingPrice || !auctionEndTime) {
         return res.status(400).json({ 
           message: 'Missing required fields',
-          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'askingPrice', 'frontImage', 'sellerId']
+          required: ['cardName', 'set', 'year', 'condition', 'rarity', 'startingPrice', 'auctionEndTime']
         });
       }
-
-      // Validate grading fields if card is graded
-      if (isGraded) {
-        if (grade === undefined || grade === null || grade < 1 || grade > 10) {
-          return res.status(400).json({ 
-            message: 'Grade must be between 1 and 10 for graded cards'
-          });
-        }
-        if (!gradingCompany || !['PSA', 'TAG', 'CGC', 'Beckett'].includes(gradingCompany)) {
-          return res.status(400).json({ 
-            message: 'Valid grading company is required for graded cards (PSA, TAG, CGC, or Beckett)'
-          });
-        }
-      }
-
 
       // Create new card
       const card = new Card({
@@ -204,21 +186,18 @@ module.exports = async (req, res) => {
         year: parseInt(year),
         condition,
         rarity,
-        askingPrice: parseFloat(askingPrice),
+        startingPrice: parseFloat(startingPrice),
+        auctionEndTime: new Date(auctionEndTime),
         description,
-        frontImage,
-        backImage,
+        frontImage: frontImage || 'placeholder.jpg',
+        backImage: backImage || 'placeholder.jpg',
         sellerId,
-        // Grading fields
-        isGraded: Boolean(isGraded),
-        grade: isGraded ? parseInt(grade) : undefined,
-        gradingCompany: isGraded ? gradingCompany : undefined,
         status: 'active'
       });
 
       await card.save();
 
-      res.status(201).json({
+      return res.status(201).json({
         message: 'Card submitted successfully',
         card: {
           id: card._id,
@@ -227,72 +206,18 @@ module.exports = async (req, res) => {
           year: card.year,
           condition: card.condition,
           rarity: card.rarity,
-          askingPrice: card.askingPrice,
-          isGraded: card.isGraded,
-          grade: card.grade,
-          gradingCompany: card.gradingCompany,
+          startingPrice: card.startingPrice,
+          auctionEndTime: card.auctionEndTime,
           status: card.status
         }
       });
     }
 
-    // PUT request - update card
-    else if (req.method === 'PUT') {
-      const { id } = req.query;
-      if (!id) {
-        return res.status(400).json({ message: 'Card ID is required' });
-      }
-
-      const card = await Card.findById(id);
-      if (!card) {
-        return res.status(404).json({ message: 'Card not found' });
-      }
-
-      // Allow updates to status, startingPrice, minPrice, auctionEndTime
-      const allowedUpdates = ['status', 'startingPrice', 'minPrice', 'auctionEndTime'];
-      const updates = {};
-      
-      allowedUpdates.forEach(field => {
-        if (req.body[field] !== undefined) {
-          if (field === 'auctionEndTime' && req.body[field]) {
-            updates[field] = new Date(req.body[field]);
-          } else if (field === 'startingPrice' || field === 'minPrice') {
-            updates[field] = parseFloat(req.body[field]);
-          } else {
-            updates[field] = req.body[field];
-          }
-        }
-      });
-
-      // Validate auction end time if being updated
-      if (updates.auctionEndTime) {
-        const now = new Date();
-        if (updates.auctionEndTime <= now) {
-          return res.status(400).json({ 
-            message: 'Auction end time must be in the future' 
-          });
-        }
-      }
-
-      const updatedCard = await Card.findByIdAndUpdate(
-        id, 
-        updates, 
-        { new: true, runValidators: true }
-      );
-
-      res.json({
-        message: 'Card updated successfully',
-        card: updatedCard
-      });
-    }
-
-    // Method not allowed
     else {
       return res.status(405).json({ message: 'Method not allowed' });
     }
-
   } catch (error) {
-    console.error('Cards API error:', error);
-    res.status(500).json({ message: 'Error processing request' });
+    console.error('Cards error:', error);
+    res.status(500).json({ message: 'Error processing cards request' });
   }
 };
