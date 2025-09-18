@@ -119,7 +119,9 @@ module.exports = async (req, res) => {
 
     // GET request - fetch cards
     if (req.method === 'GET') {
+      console.log('GET cards request received');
       const { page = 1, limit = 12, id } = req.query;
+      console.log('Query params:', { page, limit, id });
       
       // If ID is provided, fetch single card
       if (id) {
@@ -131,7 +133,10 @@ module.exports = async (req, res) => {
       }
 
       // Fetch paginated cards
+      console.log('Fetching paginated cards');
       const skip = (parseInt(page) - 1) * parseInt(limit);
+      console.log('Skip:', skip, 'Limit:', parseInt(limit));
+      
       const cards = await Card.find({ status: 'active' })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -139,8 +144,12 @@ module.exports = async (req, res) => {
         .populate('sellerId', 'firstName lastName username')
         .select('cardName set year condition rarity startingPrice auctionEndTime totalOffers createdAt sellerId frontImage backImage description');
 
+      console.log('Found cards:', cards.length);
+
       const total = await Card.countDocuments({ status: 'active' });
       const totalPages = Math.ceil(total / parseInt(limit));
+
+      console.log('Total cards:', total, 'Total pages:', totalPages);
 
       return res.json({
         cards,
