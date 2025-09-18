@@ -162,10 +162,23 @@ const cardSchema = new mongoose.Schema({
 const Card = mongoose.models.Card || mongoose.model('Card', cardSchema);
 
 // CORS headers
-const setCorsHeaders = (res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+const setCorsHeaders = (res, req) => {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'https://cardmarketfrontend.vercel.app',
+    'https://pokemon-card-marketplace.vercel.app'
+  ];
+  
+  const origin = req?.headers?.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 };
 
 // Handle preflight requests
@@ -462,7 +475,7 @@ const handleCards = async (req, res) => {
 
 // Main handler
 module.exports = async (req, res) => {
-  setCorsHeaders(res);
+  setCorsHeaders(res, req);
   
   if (handlePreflight(req, res)) {
     return;
