@@ -84,7 +84,76 @@ const cardSchema = new mongoose.Schema({
   }
 });
 
-const Card = mongoose.models.Card || mongoose.model('Card', cardSchema);
+// User Schema (needed for populate)
+const userSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: {
+    type: String,
+    required: true,
+    minlength: 6
+  },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 20,
+    match: /^[a-zA-Z0-9_]+$/
+  },
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  canTrade: {
+    type: Boolean,
+    default: true
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  userType: {
+    type: String,
+    enum: ['customer', 'vendor', 'admin'],
+    default: 'customer'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Ensure the models are properly registered
+if (!mongoose.models.Card) {
+  mongoose.model('Card', cardSchema);
+}
+if (!mongoose.models.User) {
+  mongoose.model('User', userSchema);
+}
+
+const Card = mongoose.model('Card');
+const User = mongoose.model('User');
 
 // Extract user ID from JWT token
 const getUserIdFromToken = (req) => {
@@ -137,26 +206,34 @@ module.exports = async (req, res) => {
       const skip = (parseInt(page) - 1) * parseInt(limit);
       console.log('Skip:', skip, 'Limit:', parseInt(limit));
       
-      const cards = await Card.find({ status: 'active' })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('sellerId', 'firstName lastName username')
-        .select('cardName set year condition rarity startingPrice auctionEndTime totalOffers createdAt sellerId frontImage backImage description');
+      try {
+        const cards = await Card.find({ status: 'active' })
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .populate('sellerId', 'firstName lastName username')
+          .select('cardName set year condition rarity startingPrice auctionEndTime totalOffers createdAt sellerId frontImage backImage description');
 
-      console.log('Found cards:', cards.length);
+        console.log('Found cards:', cards.length);
 
-      const total = await Card.countDocuments({ status: 'active' });
-      const totalPages = Math.ceil(total / parseInt(limit));
+        const total = await Card.countDocuments({ status: 'active' });
+        const totalPages = Math.ceil(total / parseInt(limit));
 
-      console.log('Total cards:', total, 'Total pages:', totalPages);
+        console.log('Total cards:', total, 'Total pages:', totalPages);
 
-      return res.json({
-        cards,
-        totalPages,
-        currentPage: parseInt(page),
-        total
-      });
+        return res.json({
+          cards,
+          totalPages,
+          currentPage: parseInt(page),
+          total
+        });
+      } catch (dbError) {
+        console.error('Database query error:', dbError);
+        return res.status(500).json({ 
+          message: 'Database query error', 
+          error: dbError.message 
+        });
+      }
     }
 
     // POST request - create new card
